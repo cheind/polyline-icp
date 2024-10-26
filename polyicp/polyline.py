@@ -132,6 +132,9 @@ def icp(
         prev_rmse = rmse
 
     result = ICPResult(
-        converged=step < max_iter and not failed, rmse=rmse, x_hat=x, steps=step + 1
+        converged=step < max_iter and not failed,
+        rmse=rmse,
+        x_hat=x,
+        steps=step + 1,
     )
     return result
