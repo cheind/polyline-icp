@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+requires-python = ">=3.10"
+authors = [{ name = "Christoph Heindl"}]
+name = "polyline-icp"
+dynamic = ["dependencies", "optional-dependencies", "version"]
+
+[project.urls]
+Homepage = "https://github.com/cheind/polyline-icp"
+
+[tool.setuptools.packages.find]
+where = ["."] 
+include = ["polyicp*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "polyicp.version.VERSION"}
+dependencies = { file = ["requirements.in"] }
+optional-dependencies.dev = { file = ["dev-requirements.in"] }
