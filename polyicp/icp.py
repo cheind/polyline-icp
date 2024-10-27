@@ -37,24 +37,35 @@ def _reject_outlier(dist2, iqr_factor: float = 1.5):
     return dist2 < th
 
 
-def _point_distance(x, y):
+def _point_distance(y):
     """For each $x_i$ compute closest point in $y$."""
-    dists = ((y[:, None] - x[None, :]) ** 2).sum(-1)
-    argmin_c = np.argmin(dists, axis=0)
-    return y[argmin_c]
+
+    def compute(x, y):
+        dists = ((y[:, None] - x[None, :]) ** 2).sum(-1)
+        argmin_c = np.argmin(dists, axis=0)
+        return y[argmin_c]
+
+    return compute
 
 
-def _index_pairing(x, y):
-    print(x.shape, y.shape)
-    n = min(len(x), len(y))
-    return y[:n]
+def _index_pairing(_):
+    def compute(x, y):
+        n = min(len(x), len(y))
+        return y[:n]
+
+    return compute
 
 
-def _polyline_distance(x, y):
+def _polyline_distance(y):
     """For each point $x_i$ compute closest point on polyline $y$."""
+    # Memorize y to utilize precomputed values in multiple iterations
     pl = polylines.polyline(y)
-    y_hat, *_ = pl.project(x)
-    return y_hat
+
+    def compute(x, _):
+        y_hat = pl.project(x, with_extra=False)
+        return y_hat
+
+    return compute
 
 
 _pair_name_map = {
@@ -99,10 +110,10 @@ def icp(
 
     # Setup pairing function
     if pairing_fn is None:
-        pairing_fn = _point_distance
+        pairing_fn = _pair_name_map["point"](y)
         _logger.debug("Assuming two pointclouds. Specify pairing_fn=...")
     elif isinstance(pairing_fn, str):
-        pairing_fn = _pair_name_map[pairing_fn]
+        pairing_fn = _pair_name_map[pairing_fn](y)
 
     # Setup rejection function
     if reject_fn is None:
@@ -202,11 +213,10 @@ def test_b():
     ref = np.load(r"etc/data/ref.npy")[0]
 
     test = ref + np.random.randn(3)
-    ref = ref[20::40]
+    ref = ref[20::40]  # this flips!
+    # ref = ref[::20]
 
     import matplotlib.pyplot as plt
-
-    fig, ax = plt.subplots(1, 1, subplot_kw={"projection": "3d"})
 
     # coarse align
     # r = icp(test, ref, with_scale=False, max_iter=1, pairing_fn="index")
@@ -215,7 +225,7 @@ def test_b():
         test,
         ref,
         with_scale=False,
-        max_iter=20,
+        max_iter=100,
         pairing_fn="point",
         reject_fn="outlier",
     )
@@ -223,11 +233,12 @@ def test_b():
         test,
         ref,
         with_scale=False,
-        max_iter=20,
+        max_iter=100,
         pairing_fn="polyline",
-        reject_fn="outlier",
+        reject_fn="none",
     )
 
+    fig, ax = plt.subplots(1, 1, subplot_kw={"projection": "3d"})
     ax.plot(ref[:, 0], ref[:, 1], ref[:, 2], c="k")
     ax.scatter(ref[:, 0], ref[:, 1], ref[:, 2], s=4, c="k")
     ax.plot(r1.x_hat[:, 0], r1.x_hat[:, 1], r1.x_hat[:, 2], c="g")
@@ -235,8 +246,38 @@ def test_b():
     ax.scatter(ref[:1, 0], ref[:1, 1], ref[:1, 2], c="k")
     ax.scatter(r1.x_hat[:1, 0], r1.x_hat[:1, 1], r1.x_hat[:1, 2], c="g")
     ax.scatter(r2.x_hat[:1, 0], r2.x_hat[:1, 1], r2.x_hat[:1, 2], c="magenta")
+    ax.set_box_aspect((np.ptp(ref[..., 0]), np.ptp(ref[..., 1]), np.ptp(ref[..., 2])))
+
+    # matches
+    fig, ax = plt.subplots(1, 1, subplot_kw={"projection": "3d"})
+    ax.plot(ref[:, 0], ref[:, 1], ref[:, 2], c="k")
+    ax.scatter(ref[:, 0], ref[:, 1], ref[:, 2], s=4, c="k")
+    ax.plot(r2.x_hat[:, 0], r2.x_hat[:, 1], r2.x_hat[:, 2], c="magenta")
+    ax.scatter(ref[:1, 0], ref[:1, 1], ref[:1, 2], c="k")
+    ax.scatter(r2.x_hat[:1, 0], r2.x_hat[:1, 1], r2.x_hat[:1, 2], c="magenta")
+
+    pl = polylines.polyline(ref)
+    c = pl.project(r2.x_hat)
+    for a, b in zip(r2.x_hat, c):
+        l = np.stack((a, b), 0)
+        ax.plot(l[:, 0], l[:, 1], l[:, 2], c="g")
 
     ax.set_box_aspect((np.ptp(ref[..., 0]), np.ptp(ref[..., 1]), np.ptp(ref[..., 2])))
+
+    fig, ax = plt.subplots(1, 1, subplot_kw={"projection": "3d"})
+    ax.plot(ref[:, 0], ref[:, 1], ref[:, 2], c="k")
+    ax.scatter(ref[:, 0], ref[:, 1], ref[:, 2], s=4, c="k")
+    ax.plot(r1.x_hat[:, 0], r1.x_hat[:, 1], r1.x_hat[:, 2], c="magenta")
+    ax.scatter(ref[:1, 0], ref[:1, 1], ref[:1, 2], c="k")
+    ax.scatter(r1.x_hat[:1, 0], r1.x_hat[:1, 1], r1.x_hat[:1, 2], c="magenta")
+
+    c = _point_distance(ref)(r1.x_hat, ref)
+    for a, b in zip(r1.x_hat, c):
+        l = np.stack((a, b), 0)
+        ax.plot(l[:, 0], l[:, 1], l[:, 2], c="g")
+
+    ax.set_box_aspect((np.ptp(ref[..., 0]), np.ptp(ref[..., 1]), np.ptp(ref[..., 2])))
+
     plt.show()
 
 
