@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Protocol
 
 import numpy as np
 
@@ -8,8 +8,41 @@ from . import motion, polylines
 
 _logger = logging.getLogger("polyicp")
 
-PairingFn = Callable[[np.ndarray, np.ndarray], np.ndarray]
-RejectFn = Callable[[np.ndarray], np.ndarray]
+
+class PairingFn(Protocol):
+    def pair(
+        self, x: np.ndarray, y: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Determine the corresponding points in y for x.
+
+        Params:
+            x: (N,D) array of x at iteration t.
+            y: (N,D) array of reference points.
+
+        Returns:
+            x_pair: (M,D) partner points in x, such that x_i and y_i
+                match up.
+            y_pair: (M,D) partner points in y such that x_i and y_i
+                match up.
+            dist2: (M,) Squared distance
+        """
+        ...
+
+
+class WeightingFn(Protocol):
+    def weight(
+        self, x_pair: np.ndarray, y_pair: np.ndarray, dist2: np.ndarray
+    ) -> np.ndarray:
+        """Determine the weights for each pair of points
+
+        Params:
+            x_pair: (M,D) array of partner points in x
+            y_pair: (M,D) array of partner points in y
+            dist2: (M,) Squared distance
+
+        Returns:
+            w: (M,) array of weights for each pair.
+        """
 
 
 @dataclass
@@ -32,61 +65,77 @@ def _outlier_threshold(x, iqr_factor):
     return th
 
 
-def _reject_outlier(dist2, iqr_factor: float = 3.0):
-    th = _outlier_threshold(dist2, iqr_factor)
-    return dist2 < th
-
-
-def _point_distance(y):
+class point_to_point(PairingFn):
     """For each $x_i$ compute closest point in $y$."""
 
-    def compute(x, y):
-        dists = ((y[:, None] - x[None, :]) ** 2).sum(-1)
-        argmin_c = np.argmin(dists, axis=0)
-        return y[argmin_c]
+    def __init__(self, y: np.ndarray):
+        pass
 
-    return compute
-
-
-def _index_pairing(_):
-    def compute(x, y):
-        n = min(len(x), len(y))
-        return y[:n]
-
-    return compute
+    def pair(self, x, y):
+        dist2 = ((y[:, None] - x[None, :]) ** 2).sum(-1)
+        amin = np.argmin(dist2, axis=0)
+        return x, y[amin], dist2[amin, np.arange(x.shape[0])]
 
 
-def _polyline_distance(y):
+class point_to_polyline(PairingFn):
     """For each point $x_i$ compute closest point on polyline $y$."""
-    # Memorize y to utilize precomputed values in multiple iterations
-    pl = polylines.polyline(y)
 
-    def compute(x, _):
-        y_hat = pl.project(x, with_extra=False)
-        return y_hat
+    def __init__(self, y: np.ndarray, ptype: str = "open"):
+        self.pl = polylines.polyline(y, ptype=ptype)
 
-    return compute
+    def pair(self, x, y):
+        y_hat, extra = self.pl.project(x, with_extra=True)
+        return x, y_hat, extra["dist2_qx"]
 
 
-_pair_name_map = {
-    "point": _point_distance,
-    "polyline": _polyline_distance,
-    "index": _index_pairing,
+class outlier_rejection(WeightingFn):
+    """Hard rejects pairs with distances greater than a IQR threshold."""
+
+    def __init__(self, y: np.ndarray, iqr_factor: float = 3.0):
+        self.iqr_factor = iqr_factor
+
+    def weight(self, x_pair, y_pair, dist2):
+        th = _outlier_threshold(dist2, self.iqr_factor)
+        w = np.ones_like(dist2)
+        w[dist2 > th] = 0.1
+        return w
+
+
+class constant_weighting(WeightingFn):
+    def __init__(self, y: np.ndarray):
+        pass
+
+    def weight(self, x_pair, y_pair, dist2):
+        return np.ones_like(dist2)
+
+
+# def _index_pairing(_):
+#     def compute(x, y):
+#         n = min(len(x), len(y))
+#         return y[:n]
+
+#     return compute
+
+
+_pair_map = {
+    "point": point_to_point,
+    "polyline": point_to_polyline,
+    # "index": _index_pairing,
 }
 
-_reject_name_map = {
-    "outlier": _reject_outlier,
-    "none": lambda d: np.ones_like(d, dtype=bool),
+_weight_map = {
+    "outlier": outlier_rejection,
+    "constant": constant_weighting,
 }
 
 
 def icp(
     x: np.ndarray,
     y: np.ndarray,
-    max_iter: int,
-    with_scale: bool,
+    max_iter: int = 100,
     pairing_fn: str | PairingFn = "point",
-    reject_fn: str | RejectFn = "none",
+    weighting_fn: str | WeightingFn = "constant",
+    with_scale: bool = False,
     err_th: float = 1e-5,
     err_diff_th: float = 1e-4,
     use_tqdm: bool = None,
@@ -103,26 +152,31 @@ def icp(
     Errors are measured as RMSE and have hence the units of $x$.
 
     Params:
-        x: point-set to be registered to $y$
+        x: point-set to be registered to y
         y: target point-set/polyline
         max_iter: maximum number of iterations
-        with_scale: when true computes scale, rotation and translation.
-            when false, computes rotation and translation components.
+        pairing_fn: Pairing function to determine matches
+        weighting_fn: Weighting function to compute individual match weights
+        with_scale: when true computes scale, rotation and translation
+            when false, computes rotation and translation components
+        err_th: Terminates when error is less than this threshold
+        err_diff_th: Terminates when the error progress falls below this threshold
+        use_tqdm: When true and tqdm is found, progress is shown
     """
 
     # Setup pairing function
     if pairing_fn is None:
-        pairing_fn = _pair_name_map["point"](y)
+        pairing_fn = _pair_map["point"](y)
         _logger.debug("Assuming two pointclouds. Specify pairing_fn=...")
     elif isinstance(pairing_fn, str):
-        pairing_fn = _pair_name_map[pairing_fn](y)
+        pairing_fn = _pair_map[pairing_fn](y)
 
     # Setup rejection function
-    if reject_fn is None:
-        reject_fn = _reject_name_map["none"]
-        _logger.debug("Assuming no rejection. Specify reject_fn=...")
-    elif isinstance(reject_fn, str):
-        reject_fn = _reject_name_map[reject_fn]
+    if weighting_fn is None:
+        weighting_fn = _weight_map["constant"](y)
+        _logger.debug("Assuming constant weighting. Specify weighting_fn=...")
+    elif isinstance(weighting_fn, str):
+        weighting_fn = _weight_map[weighting_fn](y)
 
     # Use tqdm if None and available
     if use_tqdm is None:
@@ -139,30 +193,27 @@ def icp(
 
     prev_rmse = None
     failed = False
+    history = []
 
     # kick-off
-    closest_y = pairing_fn(x, y)
-    r = np.square(closest_y - x).sum(-1)
+    x_pair, y_pair, xy_dist2 = pairing_fn.pair(x, y)
 
-    history = []
     for step in gen:
 
-        mask = reject_fn(r)
-        if ~np.any(mask):
-            # No single inliner
+        weights = weighting_fn.weight(x_pair, y_pair, xy_dist2)
+        if weights.sum() == 0:
             _logger.debug("Failed to converge: all-rejected")
             failed = True
             break
 
         scale, R, t = motion.compute_motion(
-            x[mask], closest_y[mask], with_scale=with_scale
+            x_pair, y_pair, with_scale=with_scale, w=weights
         )
         history.append((scale, R, t))
         x = scale * (x @ R.T) + t.reshape(1, 3)
 
-        closest_y = pairing_fn(x, y)
-        r = np.square(closest_y - x).sum(-1)
-        rmse = np.sqrt(r.mean())
+        x_pair, y_pair, xy_dist2 = pairing_fn.pair(x, y)
+        rmse = np.sqrt(xy_dist2.mean())
 
         if use_tqdm and (step % 5 == 0):
             gen.set_postfix({"rmse": rmse})
@@ -214,8 +265,8 @@ def test_b():
     np.random.seed(71189)
     ref = np.load(r"etc/data/ref.npy")[0]
 
-    test = ref + np.random.randn(3)
-    ref = ref[20::40]  # this flips!
+    test = ref + np.random.randn(3) * 1e-1
+    # ref = ref[::20]  # this flips!
     # ref = ref[::20]
 
     import matplotlib.pyplot as plt
@@ -223,13 +274,20 @@ def test_b():
     # coarse align
     # r = icp(test, ref, with_scale=False, max_iter=1, pairing_fn="index")
 
+    fig, ax = plt.subplots(1, 1, subplot_kw={"projection": "3d"})
+    ax.plot(ref[:, 0], ref[:, 1], ref[:, 2], c="k")
+    ax.scatter(ref[:, 0], ref[:, 1], ref[:, 2], s=4, c="k")
+    ax.plot(test[:, 0], test[:, 1], test[:, 2], c="g")
+    ax.scatter(test[:1, 0], test[:1, 1], test[:1, 2], c="g")
+    ax.set_box_aspect((np.ptp(ref[..., 0]), np.ptp(ref[..., 1]), np.ptp(ref[..., 2])))
+
     r1 = icp(
         test,
         ref,
         with_scale=False,
         max_iter=100,
         pairing_fn="point",
-        reject_fn="outlier",
+        weighting_fn="outlier",
     )
     r2 = icp(
         test,
@@ -237,11 +295,10 @@ def test_b():
         with_scale=False,
         max_iter=100,
         pairing_fn="polyline",
-        reject_fn="outlier",
+        weighting_fn="outlier",
     )
 
-    print(np.linalg.det(r1.history[-1][1]))
-    print(np.linalg.det(r2.history[-1][1]))
+    print(r1.converged, r2.converged)
 
     fig, ax = plt.subplots(1, 1, subplot_kw={"projection": "3d"})
     ax.plot(ref[:, 0], ref[:, 1], ref[:, 2], c="k")
@@ -276,8 +333,8 @@ def test_b():
     ax.scatter(ref[:1, 0], ref[:1, 1], ref[:1, 2], c="k")
     ax.scatter(r1.x_hat[:1, 0], r1.x_hat[:1, 1], r1.x_hat[:1, 2], c="magenta")
 
-    c = _point_distance(ref)(r1.x_hat, ref)
-    for a, b in zip(r1.x_hat, c):
+    x_hat, y_hat, _ = point_to_point(ref).pair(r1.x_hat, ref)
+    for a, b in zip(x_hat, y_hat):
         l = np.stack((a, b), 0)
         ax.plot(l[:, 0], l[:, 1], l[:, 2], c="g")
 

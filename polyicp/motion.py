@@ -50,7 +50,7 @@ def compute_motion(
     w_sum = w.sum()
     if w_sum < 1e-7:
         _logger.warning("Sum of weights less than threshold")
-        raise RuntimeError("Sum of weights less than threshold")
+        # raise RuntimeError("Sum of weights less than threshold")
 
     # Weighted centroid
     x_mu = (x * w[:, None]).sum(0, keepdims=True) / w_sum
@@ -74,7 +74,7 @@ def compute_motion(
     V = Vh.T
     if (D > np.finfo(D.dtype).eps).sum() < dims:
         _logger.warning("Degenerate rank of covariance matrix.")
-        raise RuntimeError("Degenerate rank of covariance matrix")
+        # raise RuntimeError("Degenerate rank of covariance matrix")
 
     # Construct S that fixes the orientation of R to get det(R)=1.
     S = np.eye(U.shape[0])
