@@ -170,7 +170,7 @@ def icp(
     return result
 
 
-if __name__ == "__main__":
+def test_a():
     logging.basicConfig(level=logging.DEBUG)
 
     ref = np.load(r"etc/data/ref.npy")[0]
@@ -195,3 +195,51 @@ if __name__ == "__main__":
 
     ax.set_box_aspect((np.ptp(ref[..., 0]), np.ptp(ref[..., 1]), np.ptp(ref[..., 2])))
     plt.show()
+
+
+def test_b():
+    np.random.seed(71189)
+    ref = np.load(r"etc/data/ref.npy")[0]
+
+    test = ref + np.random.randn(3)
+    ref = ref[20::40]
+
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(1, 1, subplot_kw={"projection": "3d"})
+
+    # coarse align
+    # r = icp(test, ref, with_scale=False, max_iter=1, pairing_fn="index")
+
+    r1 = icp(
+        test,
+        ref,
+        with_scale=False,
+        max_iter=20,
+        pairing_fn="point",
+        reject_fn="outlier",
+    )
+    r2 = icp(
+        test,
+        ref,
+        with_scale=False,
+        max_iter=20,
+        pairing_fn="polyline",
+        reject_fn="outlier",
+    )
+
+    ax.plot(ref[:, 0], ref[:, 1], ref[:, 2], c="k")
+    ax.scatter(ref[:, 0], ref[:, 1], ref[:, 2], s=4, c="k")
+    ax.plot(r1.x_hat[:, 0], r1.x_hat[:, 1], r1.x_hat[:, 2], c="g")
+    ax.plot(r2.x_hat[:, 0], r2.x_hat[:, 1], r2.x_hat[:, 2], c="magenta")
+    ax.scatter(ref[:1, 0], ref[:1, 1], ref[:1, 2], c="k")
+    ax.scatter(r1.x_hat[:1, 0], r1.x_hat[:1, 1], r1.x_hat[:1, 2], c="g")
+    ax.scatter(r2.x_hat[:1, 0], r2.x_hat[:1, 1], r2.x_hat[:1, 2], c="magenta")
+
+    ax.set_box_aspect((np.ptp(ref[..., 0]), np.ptp(ref[..., 1]), np.ptp(ref[..., 2])))
+    plt.show()
+
+
+if __name__ == "__main__":
+
+    test_b()
