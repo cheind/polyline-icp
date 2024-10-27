@@ -5,6 +5,10 @@ class polyline:
     def __init__(self, line: np.ndarray, ptype: str = "open"):
         """Initialize one or more n-dimensional polylines.
 
+        Note:
+            When the polyline contains duplicate points are is
+            self-crossing, the results are undefined.
+
         Params:
             line: (L,N,D) or (N,D) line points. L poly lines
                 having N points in D dimensions each.
@@ -18,7 +22,7 @@ class polyline:
             line = line[None,]
 
         if ptype == "closed":
-            line = np.concatenate((line, line[:, :1]), 0)
+            line = np.concatenate((line, line[:, :1]), 1)
 
         self.line = line
         # Segment related
@@ -27,22 +31,30 @@ class polyline:
         self.bb = np.einsum(
             "lnk,lnk->ln", self.b, self.b
         )  # squared seg lengths (L,N-1)
-        # (L,N-1), bb_cumsum[i] = sum of squared lengths before segment i
-        self.bb_cumsum = np.cumulative_sum(self.bb, axis=0, include_initial=True)[:-1]
 
-    def project(self, x: np.ndarray):
+        # (L,N-1), len_cumsum[i] = sum of squared lengths before segment i
+        self.seg_lens = np.sqrt(self.bb)
+        self.seg_lens_cumsum = np.cumulative_sum(
+            self.seg_lens, axis=1, include_initial=True
+        )[:, :-1]
+
+    def project(self, x: np.ndarray, with_extra: bool = False):
         """Computes the closest point on each line $l_i$ for each query point $x_j$.
+
+        In the case of ambiguous closest points, this method returns the
+        first occurrence along the line.
 
         Params:
             x: (M,D) M query points in D dimensions
+            with_extra: when true, computes additional statistics
 
         Returns:
             q: (L,M,D) closest polyline point fo each input point/line
-            dist2_qx: (L,M) squared distances of q to x for each point/line
-            #seg_idx: (L,M) line segment index containing q
-            #t: (L,M) parametric distance t of q in segment [0..1]
-            t: (L,M)  parametric path length from start of polyline to q
-                in range [0..1]
+            extra: (optional) dictionary containing extra information
+                dist2_qx: (L,M) squared distances of q to x for each point/line
+                seg_idx: (L,M) line segment index containing q
+                t: (L,M) parametric distance t of q in segment [0..1]
+                len2_pq: (L,M) squared path length  to q
 
         """
         squeeze_point_dim = x.ndim == 1
@@ -71,41 +83,43 @@ class polyline:
         dist2seg = np.square(x[None, None] - proj_ba).sum(-1)  # (L,N-1,M)
         seg_idx = np.argmin(dist2seg, 1)  # (L,M)
 
-        # closest point on p to x
-        q = np.take_along_axis(proj_ba, seg_idx[:, None, :, None], axis=1)
-        # t relative to the line segment that contains q
-        t_seg = np.take_along_axis(t, seg_idx[:, None, :], axis=1)
-        # distance squared from q to x
-        dist2_qx = np.take_along_axis(dist2seg, seg_idx[:, None, :], axis=1)
-        # square path length from start of polyline to begin of segment that contains q
-        len2_pq_prior = np.take_along_axis(self.bb_cumsum, seg_idx, axis=1)  # (L,M)
-        # (L,M,1,D), (L,1,M), (L,M), (L,1,M)
+        # closest point on p to x (L,M,D)
+        q = np.take_along_axis(proj_ba, seg_idx[:, None, :, None], axis=1).squeeze(1)
 
-        bbb = np.take_along_axis(self.bb, seg_idx, axis=1)
+        extra = {}
+        if with_extra:
+            # t relative to the line segment that contains q (L,M)
+            t_seg = np.take_along_axis(t, seg_idx[:, None, :], axis=1).squeeze(1)
+            # distance squared from q to x (L,M)
+            dist2_qx = np.take_along_axis(
+                dist2seg, seg_idx[:, None, :], axis=1
+            ).squeeze(1)
+            # path length from start of polyline to begin of
+            # segment that contains q (L,M)
+            pathlen_upto_seg = np.take_along_axis(self.seg_lens_cumsum, seg_idx, axis=1)
+            # add length of path of q in segment
+            seg_len = np.take_along_axis(self.seg_lens, seg_idx, axis=1)
+            pathlen_q = pathlen_upto_seg + t_seg * seg_len
 
-        q = q.squeeze(1)
-        dist2_qx = dist2_qx.squeeze(1)
-        t_seg = t_seg.squeeze(1)
-        # (L,M,D), (L,M), (L,M)
-
-        # squared path length from start of polyline to q
-        len2_pq = len2_pq_prior + (t_seg**2) * bbb
+            extra = {
+                "dist2_qx": dist2_qx,
+                "seg_idx": seg_idx,
+                "t_seg": t_seg,
+                "pathlen_q": pathlen_q,
+            }
 
         if self.squeeze_line_dim:
             q = q.squeeze(0)
-            len2_pq = len2_pq.squeeze(0)
-            dist2_qx = dist2_qx.squeeze(0)
-            t_seg = t_seg.squeeze(0)
-            seg_idx = seg_idx.squeeze(0)
+            extra = {k: v.squeeze(0) for k, v in extra.items()}
 
         if squeeze_point_dim:
             q = q.squeeze(-2)
-            len2_pq = len2_pq.squeeze(-1)
-            dist2_qx = dist2_qx.squeeze(-1)
-            t_seg = t_seg.squeeze(-1)
-            seg_idx = seg_idx.squeeze(-1)
+            extra = {k: v.squeeze(-1) for k, v in extra.items()}
 
-        return q, dist2_qx, seg_idx, t_seg, len2_pq
+        if with_extra:
+            return q, extra
+        else:
+            return q
 
 
 def test_very_simple():
