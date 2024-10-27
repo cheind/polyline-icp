@@ -42,6 +42,7 @@ def compute_motion(
 
     # Weighted centroid
     w_sum = w.sum()
+    assert w_sum > 0
     x_mu = (x * w[:, None]).sum(0, keepdims=True) / w_sum
     y_mu = (y * w[:, None]).sum(0, keepdims=True) / w_sum
 
