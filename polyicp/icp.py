@@ -27,12 +27,12 @@ def _outlier_threshold(x, iqr_factor):
     """Compute the threshold for moderate outliers."""
     q75, q25 = np.percentile(x, [75, 25])
     iqr = q75 - q25
-    th = q75 + 1.5 * iqr
+    th = q75 + iqr_factor * iqr
     th += 1e-8  # account for situation that all are equal
     return th
 
 
-def _reject_outlier(dist2, iqr_factor: float = 1.5):
+def _reject_outlier(dist2, iqr_factor: float = 3.0):
     th = _outlier_threshold(dist2, iqr_factor)
     return dist2 < th
 
@@ -235,8 +235,11 @@ def test_b():
         with_scale=False,
         max_iter=100,
         pairing_fn="polyline",
-        reject_fn="none",
+        reject_fn="outlier",
     )
+
+    print(np.linalg.det(r1.history[-1][1]))
+    print(np.linalg.det(r2.history[-1][1]))
 
     fig, ax = plt.subplots(1, 1, subplot_kw={"projection": "3d"})
     ax.plot(ref[:, 0], ref[:, 1], ref[:, 2], c="k")
