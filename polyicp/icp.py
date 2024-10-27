@@ -85,11 +85,11 @@ def icp(
     y: np.ndarray,
     max_iter: int,
     with_scale: bool,
-    use_tqdm: bool = None,
     pairing_fn: str | PairingFn = "point",
     reject_fn: str | RejectFn = "none",
     err_th: float = 1e-5,
     err_diff_th: float = 1e-4,
+    use_tqdm: bool = None,
 ) -> icp_result:
     """Iteratively computes the transformation that aligns $x$ with $y$.
 
@@ -105,7 +105,9 @@ def icp(
     Params:
         x: point-set to be registered to $y$
         y: target point-set/polyline
-
+        max_iter: maximum number of iterations
+        with_scale: when true computes scale, rotation and translation.
+            when false, computes rotation and translation components.
     """
 
     # Setup pairing function
