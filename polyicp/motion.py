@@ -1,8 +1,11 @@
 import numpy as np
+import logging
+
+_logger = logging.getLogger("polyicp")
 
 
 def compute_motion(
-    y: np.ndarray, x: np.ndarray, with_scale: bool, w: np.ndarray = None
+    x: np.ndarray, y: np.ndarray, with_scale: bool, w: np.ndarray = None
 ) -> tuple[float, np.ndarray, np.ndarray]:
     """Computes the similarity/rigid transform that aligns source with reference
     points in a least square sense.
@@ -16,33 +19,40 @@ def compute_motion(
     Alternatively, one can fix s=1 to give the rigid motion in a
     least squares sense.
 
-    Based on
-    Umeyama, Shinji, Least-squares estimation of transformation parameters
-    between two point patterns, IEEE PAMI, 1991
-    https://web.stanford.edu/class/cs273/refs/umeyama.pdf
-    https://igl.ethz.ch/projects/ARAP/svd_rot.pdf
+    This paper combines [1] and [2] and adds weighted scale support.
 
     Params:
-        y: (N,D) array of target points
         x: (N,D) array of source points
+        y: (N,D) array of target points
         w: (N,) array of weights
 
     Returns:
         scale: uniform scale
         R: (D,D) rotation matrix
-        t: (D,1) translation vector
+        t: (1,D) translation vector
+
+    References:
+
+    [1] Umeyama, Shinji, Least-squares estimation of transformation parameters
+    between two point patterns, IEEE PAMI, 1991
+    https://web.stanford.edu/class/cs273/refs/umeyama.pdf
+
+    [2] Sorkine-Hornung, Olga, and Michael Rabinovich. "Least-squares rigid motion using svd." Computing 1.1 (2017): 1-5.
+
     """
 
     if w is None:
         w = np.ones(x.shape[0], dtype=x.dtype)
 
     assert x.shape == y.shape and x.shape[0] == w.shape[0]
+    dims = x.shape[-1]
 
-    N = x.shape[0]
+    w_sum = w.sum()
+    if w_sum < 1e-7:
+        _logger.warning("Sum of weights less than threshold")
+        raise RuntimeError("Sum of weights less than threshold")
 
     # Weighted centroid
-    w_sum = w.sum()
-    assert w_sum > 0
     x_mu = (x * w[:, None]).sum(0, keepdims=True) / w_sum
     y_mu = (y * w[:, None]).sum(0, keepdims=True) / w_sum
 
@@ -53,30 +63,38 @@ def compute_motion(
     # Covariance of x and y.
     cov = (xn.T @ np.diag(w) @ yn) / w_sum
 
-    # Variance of n-times the variance of x.
+    # Variance of n-times the variance of x all weighted.
+    # Todo cheind: this needs to be derived from first principles.
+    # Here it is just an extension of [1] and [2]
     var_x = (np.square(xn) * w[:, None]).sum() / w_sum
 
     # 4. Solution that Maximizes trace(R'K) is R=U*V', where U, V are
     # singular vectors of COV.
     U, D, Vh = np.linalg.svd(cov)
-    # if np.count_nonzero(d > np.finfo(d.dtype).eps) < 3:
-    #    raise ValueError("Degenerate covariance rank")
     V = Vh.T
-    # Construct Z that fixes the orientation of R to get det(R)=1.
-    # Ensure right-handiness
-    S = np.eye(U.shape[0])
-    S[-1, -1] *= np.sign(np.linalg.det(U.dot(V.T)))
+    if (D > np.finfo(D.dtype).eps).sum() < dims:
+        _logger.warning("Degenerate rank of covariance matrix.")
+        raise RuntimeError("Degenerate rank of covariance matrix")
 
-    # Construct R.
+    # Construct S that fixes the orientation of R to get det(R)=1.
+    S = np.eye(U.shape[0])
+    S[-1, -1] *= np.sign(np.linalg.det(U @ V.T))
+
+    # Construct R
     R = V @ S @ U.T
 
-    # 5. Recover scale.
-    # Note, equiv. to np.trace(Z @ np.diag(d)) / var1
+    # Recover scale
+    # Note, equiv. to np.trace(R @ cov) / var _x
+    # svd(cov)=UDV
+    # R=V'SU'
+    # R(UDV)=V'SU'UDV=V'SDV
+    # then by cyclic property: trace(V'SDV)=trace(VV'SD)=trace(SD)
+    scale = 1.0
 
-    scale = (1 / var_x) * np.trace(np.diag(D) @ S)
-    scale = scale if with_scale else 1.0
+    if with_scale:
+        scale = (1 / var_x) * np.trace(np.diag(D) @ S)
 
-    # 6. Recover translation.
+    # Recover translation
     t = y_mu - scale * (x_mu @ R.T)
 
     # Apply as s*Rot(x) + t, i.e T @ S @ R @ x
