@@ -9,11 +9,14 @@ def compute_motion(
     """Computes the similarity/rigid transform that aligns source with reference
     points in a least square sense.
 
-    Computed components are $sRx + t$, where R is a rotation matrix, $t$ is a
-    translational shift and $s$ is a uniform scaling constant. The transformation
-    minimizes $\sum_i |y_i - sRx_i +t|^2.
+    Computed components are :math:`$sRx + t$`, where R is a rotation matrix, t is a
+    translational shift and s is a uniform scaling constant. The transformation
+    minimizes
 
-    You might fix $s=1$ to retrieve a rigid motion.
+    :math:`s*,R*,t*= argmin_{s,R,t} \sum_i |y_i - sRx_i +t|^2.`
+
+    Alternatively, one can fix s=1 to give the rigid motion in a
+    least squares sense.
 
     Based on
     Umeyama, Shinji, Least-squares estimation of transformation parameters
@@ -63,8 +66,11 @@ def compute_motion(
     R = V.dot(Z.dot(U.T))
 
     # 5. Recover scale.
+    # Note, equiv. to np.trace(Z @ np.diag(d)) / var1
     scale = np.trace(R.dot(K)) / var1
     scale = scale if with_scale else 1.0
+
+    # print(scale, np.trace(Z @ np.diag(d)) / var1)
 
     # 6. Recover translation.
     t = mu2 - scale * (R.dot(mu1))
