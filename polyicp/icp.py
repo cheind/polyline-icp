@@ -155,7 +155,7 @@ def icp(
             break
 
         scale, R, t = motion.compute_motion(
-            closest_y[mask], x[mask], with_scale=with_scale
+            x[mask], closest_y[mask], with_scale=with_scale
         )
         history.append((scale, R, t))
         x = scale * (x @ R.T) + t.reshape(1, 3)
