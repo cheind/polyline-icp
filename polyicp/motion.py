@@ -21,15 +21,23 @@ def compute_motion(
 
     This paper combines [1] and [2] and adds weighted scale support.
 
-    Params:
-        x: (N,D) array of source points
-        y: (N,D) array of target points
-        w: (N,) array of weights
+    Parameters
+    ----------
+    x: (N,D) array
+        source points
+    y: (N,D) array
+        target points
+    w: (N,) array optional
+        weights
 
-    Returns:
-        scale: uniform scale
-        R: (D,D) rotation matrix
-        t: (1,D) translation vector
+    Returns
+    -------
+    scale: float
+        uniform scale
+    R: (D,D) array
+        rotation matrix
+    t: (1,D) array
+        translation vector
 
     References:
 
@@ -73,9 +81,12 @@ def compute_motion(
     # singular vectors of COV.
     U, D, Vh = np.linalg.svd(cov)
     V = Vh.T
-    if (D > np.finfo(D.dtype).eps).sum() < dims:
-        _logger.warning("Degenerate rank of covariance matrix.")
-        # raise RuntimeError("Degenerate rank of covariance matrix")
+    mask = D <= np.finfo(D.dtype).eps
+    if mask.sum() < dims:
+        # Degenerate covariance matrices occur if data lives
+        # in a subspace of R^D. That's not fundamentally a problem
+        # for the algorithm
+        _logger.info("Degenerate rank of covariance matrix.")
 
     # Construct S that fixes the orientation of R to get det(R)=1.
     S = np.eye(U.shape[0])
@@ -100,56 +111,3 @@ def compute_motion(
 
     # Apply as s*Rot(x) + t, i.e T @ S @ R @ x
     return scale, R, t
-
-
-if __name__ == "__main__":
-
-    x = np.random.randn(10, 3)
-    y = x.copy() * 0.5
-    w = np.full((10,), 0.5)
-    w[5:] = 0
-
-    scale, R, t = compute_motion(y, x, with_scale=True)
-    print(scale, R, t)
-
-    np.random.seed(123)
-    x = np.random.randn(10, 2)
-    t = np.random.randn(1, 2) * 1e-2
-    R = np.array([[np.cos(0.1), -np.sin(0.1)], [np.sin(0.1), np.cos(0.1)]])
-    s = 0.5
-    print(s, R, t)
-    y = s * (x @ R.T) + t
-    scale, R, t = compute_motion(y, x, with_scale=True)
-    print(scale, R, t)
-    xh = s * (x @ R.T) + t
-    errs = np.linalg.norm(xh - y, axis=-1)
-    print(errs)
-    print("-" * 20)
-
-    # noisy x
-    x[-1] += 0.1
-
-    scale, R, t = compute_motion(y, x, with_scale=True)
-    print(scale, R, t)
-    xh = s * (x @ R.T) + t
-    errs = np.linalg.norm(xh - y, axis=-1)
-    print(errs)
-
-    print("-" * 20)
-
-    # weight x[0] more
-    w = np.ones((10,))
-    w[-1] = 0
-    scale, R, t = compute_motion(y, x, with_scale=True, w=w)
-    print(scale, R, t)
-    xh = s * (x @ R.T) + t
-    errs = np.linalg.norm(xh - y, axis=-1)
-    print(errs)
-
-    print("-" * 20)
-
-    scale, R, t = compute_motion(y[:-1], x[:-1], with_scale=True)
-    print(scale, R, t)
-    xh = s * (x @ R.T) + t
-    errs = np.linalg.norm(xh - y, axis=-1)
-    print(errs)
