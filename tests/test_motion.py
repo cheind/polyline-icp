@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 from polyicp.motion import compute_motion
 
-from .helpers import assert_same_transform
+from .helpers import assert_transform_equal
 from .helpers import random_problem2d
 
 
@@ -10,17 +10,17 @@ def test_identity():
     x = np.random.randn(10, 3)
     y = x.copy()
     s, R, t = compute_motion(x, y, with_scale=True)
-    assert_same_transform((s, R, t), (1.0, np.eye(3), np.zeros((1, 3))))
+    assert_transform_equal((s, R, t), (1.0, np.eye(3), np.zeros((1, 3))))
 
     x = np.random.randn(10, 2)
     y = x.copy()
     s, R, t = compute_motion(x, y, with_scale=True)
-    assert_same_transform((s, R, t), (1.0, np.eye(2), np.zeros((1, 2))))
+    assert_transform_equal((s, R, t), (1.0, np.eye(2), np.zeros((1, 2))))
 
     x = np.random.randn(10, 4)
     y = x.copy()
     s, R, t = compute_motion(x, y, with_scale=True)
-    assert_same_transform((s, R, t), (1.0, np.eye(4), np.zeros((1, 4))))
+    assert_transform_equal((s, R, t), (1.0, np.eye(4), np.zeros((1, 4))))
 
 
 @pytest.mark.parametrize("seed", range(20))
@@ -33,7 +33,7 @@ def test_rigid(seed):
     xh = s * (x @ R.T) + t
     errs = np.linalg.norm(xh - y, axis=-1)
 
-    assert_same_transform((s, R, t), theta)
+    assert_transform_equal((s, R, t), theta)
     assert np.allclose(errs, 0, atol=1e-6)
 
 
@@ -47,7 +47,7 @@ def test_similarity(seed):
     xh = s * (x @ R.T) + t
     errs = np.linalg.norm(xh - y, axis=-1)
 
-    assert_same_transform((s, R, t), theta)
+    assert_transform_equal((s, R, t), theta)
     assert np.allclose(errs, 0, atol=1e-6)
 
 
@@ -128,4 +128,4 @@ def test_subspace_degenerate():
     y3d = np.concatenate((y, np.zeros((10, 1))), -1)
     s, R, t = compute_motion(x3d, y3d, with_scale=True)
 
-    assert_same_transform((s, R, t), theta, checkdims=[0, 1])
+    assert_transform_equal((s, R, t), theta, checkdims=[0, 1])

@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def assert_same_transform(actual, expected, checkdims: list[int] = None, atol=1e-6):
+def assert_transform_equal(actual, expected, checkdims: list[int] = None, atol=1e-6):
     scale, R, t = actual
     scale_hat, R_hat, t_hat = expected
 
