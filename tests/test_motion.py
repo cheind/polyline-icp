@@ -3,28 +3,7 @@ import numpy as np
 from polyicp.motion import compute_motion
 
 from .helpers import assert_same_transform
-
-
-def _random_scene(
-    n: int = 10,
-    scale_std: float = 1e-1,
-    t_std: float = 1e-1,
-    noise_std: float = 0.0,
-    angle_max: float = (2 * np.pi),
-):
-    x = np.random.randn(n, 2)
-
-    t = np.random.randn(1, 2) * t_std
-    a = np.random.rand() * angle_max
-    R = np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]])
-    s = 1.0 + np.random.randn() * scale_std
-
-    y = s * (x @ R.T) + t
-
-    if noise_std > 0:
-        x += np.random.randn(*x.shape) * noise_std
-
-    return x, y, (s, R, t)
+from .helpers import random_problem2d
 
 
 def test_identity():
@@ -48,7 +27,7 @@ def test_identity():
 def test_rigid(seed):
     np.random.seed(seed)
 
-    x, y, theta = _random_scene(n=10, scale_std=0.0)
+    x, y, theta = random_problem2d(n=10, scale_std=0.0)
     s, R, t = compute_motion(x, y, with_scale=False)
 
     xh = s * (x @ R.T) + t
@@ -62,7 +41,7 @@ def test_rigid(seed):
 def test_similarity(seed):
     np.random.seed(seed)
 
-    x, y, theta = _random_scene(n=10, scale_std=0.1)
+    x, y, theta = random_problem2d(n=10, scale_std=0.1)
     s, R, t = compute_motion(x, y, with_scale=True)
 
     xh = s * (x @ R.T) + t
@@ -76,7 +55,7 @@ def test_similarity(seed):
 def test_noisy(seed):
     np.random.seed(seed)
 
-    x, y, theta = _random_scene(n=10, scale_std=0.1, noise_std=1e-2)
+    x, y, theta = random_problem2d(n=10, scale_std=0.1, noise_std=1e-2)
     s, R, t = compute_motion(x, y, with_scale=True)
 
     xh = s * (x @ R.T) + t
@@ -89,7 +68,7 @@ def test_noisy(seed):
 def test_weighted(seed):
     np.random.seed(seed)
 
-    x, y, theta = _random_scene(n=10, scale_std=0.1, noise_std=0.0)
+    x, y, theta = random_problem2d(n=10, scale_std=0.1, noise_std=0.0)
 
     # simulate signifant outlier at last position
     x[-1] += 1.0
@@ -142,7 +121,7 @@ def test_weighted2():
 
 
 def test_subspace_degenerate():
-    x, y, theta = _random_scene(n=10, scale_std=0.1, noise_std=0.0)
+    x, y, theta = random_problem2d(n=10, scale_std=0.1, noise_std=0.0)
     # lift to 3d
 
     x3d = np.concatenate((x, np.zeros((10, 1))), -1)

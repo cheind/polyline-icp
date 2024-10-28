@@ -45,3 +45,25 @@ def assert_same_transform(actual, expected, checkdims: list[int] = None, atol=1e
         0.0,
         atol=atol,
     )
+
+
+def random_problem2d(
+    n: int = 10,
+    scale_std: float = 1e-1,
+    t_std: float = 1e-1,
+    noise_std: float = 0.0,
+    angle_max: float = (2 * np.pi),
+):
+    x = np.random.randn(n, 2)
+
+    t = np.random.randn(1, 2) * t_std
+    a = np.random.rand() * angle_max
+    R = np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]])
+    s = 1.0 + np.random.randn() * scale_std
+
+    y = s * (x @ R.T) + t
+
+    if noise_std > 0:
+        x += np.random.randn(*x.shape) * noise_std
+
+    return x, y, (s, R, t)
