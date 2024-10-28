@@ -14,7 +14,7 @@ def compute_motion(
     translational shift and s is a uniform scaling constant. The transformation
     minimizes
 
-        s*,R*,t*= argmin_{s,R,t} \sum_i w_i |y_i - sRx_i +t|^2
+        s*,R*,t*= argmin_{s,R,t} sum_i w_i |y_i - sRx_i +t|^2
 
     Alternatively, one can fix s=1 to give the rigid motion in a
     least squares sense.
@@ -37,7 +37,8 @@ def compute_motion(
     between two point patterns, IEEE PAMI, 1991
     https://web.stanford.edu/class/cs273/refs/umeyama.pdf
 
-    [2] Sorkine-Hornung, Olga, and Michael Rabinovich. "Least-squares rigid motion using svd." Computing 1.1 (2017): 1-5.
+    [2] Sorkine-Hornung, Olga, and Michael Rabinovich.
+    "Least-squares rigid motion using svd." Computing 1.1 (2017): 1-5.
 
     """
 
