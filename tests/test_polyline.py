@@ -10,13 +10,11 @@ def test_polylines_straight_line():
     pl = polyline(lpts)
     q, extra = pl.project(x, with_extra=True)
 
-    np.testing.assert_allclose(
-        q, [[1.0, 0.0], [1.5, 0.0], [1.5, 0.0], [3.0, 0.0], [3.0, 0.0]]
-    )
-    np.testing.assert_allclose(extra["dist2_qx"], [1.0, 0.01, 0.01, 0.0, 8.0])
-    np.testing.assert_allclose(extra["seg_idx"], [0, 0, 0, 1, 1])
-    np.testing.assert_allclose(extra["t_seg"], [0, 0.5, 0.5, 1, 1])
-    np.testing.assert_allclose(extra["pathlen_q"], [0, 0.5, 0.5, 2, 2])
+    assert np.allclose(q, [[1.0, 0.0], [1.5, 0.0], [1.5, 0.0], [3.0, 0.0], [3.0, 0.0]])
+    assert np.allclose(extra["dist2_qx"], [1.0, 0.01, 0.01, 0.0, 8.0])
+    assert np.allclose(extra["seg_idx"], [0, 0, 0, 1, 1])
+    assert np.allclose(extra["t_seg"], [0, 0.5, 0.5, 1, 1])
+    assert np.allclose(extra["pathlen_q"], [0, 0.5, 0.5, 2, 2])
 
 
 def test_polylines_multiple_straight_lines():
@@ -43,35 +41,35 @@ def test_polylines_multiple_straight_lines():
 
     assert q.shape == (2, 5, 2)
 
-    np.testing.assert_allclose(
+    assert np.allclose(
         q[0], [[1.0, 0.0], [1.5, 0.0], [1.5, 0.0], [3.0, 0.0], [3.0, 0.0]]
     )
-    np.testing.assert_allclose(
+    assert np.allclose(
         q[1], [[1.0, 1.0], [1.5, 1.0], [1.5, 1.0], [3.0, 1.0], [3.0, 1.0]]
     )
 
-    np.testing.assert_allclose(
+    assert np.allclose(
         extra["dist2_qx"],
         [
             [1.0, 0.01, 0.01, 0.0, 8.0],
             [2.0, 1.1**2, 0.9**2, 1, 5],
         ],
     )
-    np.testing.assert_allclose(
+    assert np.allclose(
         extra["seg_idx"],
         [
             [0, 0, 0, 1, 1],
             [1, 1, 1, 0, 0],
         ],
     )
-    np.testing.assert_allclose(
+    assert np.allclose(
         extra["t_seg"],
         [
             [0, 0.5, 0.5, 1, 1],
             [1, 0.5, 0.5, 0.0, 0.0],
         ],
     )
-    np.testing.assert_allclose(
+    assert np.allclose(
         extra["pathlen_q"],
         [
             [0, 0.5, 0.5, 2, 2],
@@ -93,11 +91,11 @@ def test_polylines_closed():
     pl = polyline(lpts, ptype="closed")
     q, extra = pl.project(x, with_extra=True)
 
-    np.testing.assert_allclose(q, [[0.0, 0.5]])
-    np.testing.assert_allclose(extra["dist2_qx"], [0.25])
-    np.testing.assert_allclose(extra["seg_idx"], [3])
-    np.testing.assert_allclose(extra["t_seg"], [0.5])
-    np.testing.assert_allclose(extra["pathlen_q"], [3.5])
+    assert np.allclose(q, [[0.0, 0.5]])
+    assert np.allclose(extra["dist2_qx"], [0.25])
+    assert np.allclose(extra["seg_idx"], [3])
+    assert np.allclose(extra["t_seg"], [0.5])
+    assert np.allclose(extra["pathlen_q"], [3.5])
 
 
 def test_polylines_ambiguous():
@@ -115,8 +113,8 @@ def test_polylines_ambiguous():
     pl = polyline(lpts, ptype="closed")
     q, extra = pl.project(x, with_extra=True)
 
-    np.testing.assert_allclose(q, [[0.5, 0.0]])
-    np.testing.assert_allclose(extra["dist2_qx"], [0.25])
-    np.testing.assert_allclose(extra["seg_idx"], [0])
-    np.testing.assert_allclose(extra["t_seg"], [0.5])
-    np.testing.assert_allclose(extra["pathlen_q"], [0.5])
+    assert np.allclose(q, [[0.5, 0.0]])
+    assert np.allclose(extra["dist2_qx"], [0.25])
+    assert np.allclose(extra["seg_idx"], [0])
+    assert np.allclose(extra["t_seg"], [0.5])
+    assert np.allclose(extra["pathlen_q"], [0.5])

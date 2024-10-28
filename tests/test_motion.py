@@ -2,6 +2,8 @@ import pytest
 import numpy as np
 from polyicp.motion import compute_motion
 
+from .helpers import assert_same_transform
+
 
 def _random_scene(
     n: int = 10,
@@ -29,26 +31,17 @@ def test_identity():
     x = np.random.randn(10, 3)
     y = x.copy()
     s, R, t = compute_motion(x, y, with_scale=True)
-
-    np.testing.assert_allclose(s, 1.0)
-    np.testing.assert_allclose(R, np.eye(3), atol=1e-5)
-    np.testing.assert_allclose(t, np.zeros((1, 3)), atol=1e-5)
+    assert_same_transform((s, R, t), (1.0, np.eye(3), np.zeros((1, 3))))
 
     x = np.random.randn(10, 2)
     y = x.copy()
     s, R, t = compute_motion(x, y, with_scale=True)
-
-    np.testing.assert_allclose(s, 1.0)
-    np.testing.assert_allclose(R, np.eye(2), atol=1e-5)
-    np.testing.assert_allclose(t, np.zeros((1, 2)), atol=1e-5)
+    assert_same_transform((s, R, t), (1.0, np.eye(2), np.zeros((1, 2))))
 
     x = np.random.randn(10, 4)
     y = x.copy()
     s, R, t = compute_motion(x, y, with_scale=True)
-
-    np.testing.assert_allclose(s, 1.0)
-    np.testing.assert_allclose(R, np.eye(4), atol=1e-5)
-    np.testing.assert_allclose(t, np.zeros((1, 4)), atol=1e-5)
+    assert_same_transform((s, R, t), (1.0, np.eye(4), np.zeros((1, 4))))
 
 
 @pytest.mark.parametrize("seed", range(20))
@@ -61,10 +54,8 @@ def test_rigid(seed):
     xh = s * (x @ R.T) + t
     errs = np.linalg.norm(xh - y, axis=-1)
 
-    np.testing.assert_allclose(s, theta[0], atol=1e-6)
-    np.testing.assert_allclose(R, theta[1], atol=1e-6)
-    np.testing.assert_allclose(t, theta[2], atol=1e-6)
-    np.testing.assert_allclose(errs, 0, atol=1e-6)
+    assert_same_transform((s, R, t), theta)
+    assert np.allclose(errs, 0, atol=1e-6)
 
 
 @pytest.mark.parametrize("seed", range(20))
@@ -77,10 +68,8 @@ def test_similarity(seed):
     xh = s * (x @ R.T) + t
     errs = np.linalg.norm(xh - y, axis=-1)
 
-    np.testing.assert_allclose(s, theta[0], atol=1e-6)
-    np.testing.assert_allclose(R, theta[1], atol=1e-6)
-    np.testing.assert_allclose(t, theta[2], atol=1e-6)
-    np.testing.assert_allclose(errs, 0, atol=1e-6)
+    assert_same_transform((s, R, t), theta)
+    assert np.allclose(errs, 0, atol=1e-6)
 
 
 @pytest.mark.parametrize("seed", range(20))
@@ -151,11 +140,13 @@ def test_weighted2():
     assert abs(ts[0][0, 0]) < 1e-4
     assert abs(ts[-1][0, 0]) > 15
 
-    # w = np.ones(x.shape[0])
-    # w[-1] = 4.0
-    # s, R, t = compute_motion(x, y, with_scale=True, w=w)
 
-    # xh = s * (x @ R.T) + t
-    # errs = np.linalg.norm(xh - y, axis=-1)
-    # assert errs[:-1].mean() < 0.5
-    # assert errs[-1] < 1.1
+def test_subspace_degenerate():
+    x, y, theta = _random_scene(n=10, scale_std=0.1, noise_std=0.0)
+    # lift to 3d
+
+    x3d = np.concatenate((x, np.zeros((10, 1))), -1)
+    y3d = np.concatenate((y, np.zeros((10, 1))), -1)
+    s, R, t = compute_motion(x3d, y3d, with_scale=True)
+
+    assert_same_transform((s, R, t), theta, checkdims=[0, 1])
