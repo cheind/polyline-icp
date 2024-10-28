@@ -1,10 +1,10 @@
 import logging
 from dataclasses import dataclass
-from typing import Callable, Protocol
+from typing import Protocol
 
 import numpy as np
 
-from . import motion, polylines
+from . import motion, polylines, utils
 
 _logger = logging.getLogger("polyicp")
 
@@ -50,6 +50,7 @@ class icp_result:
     converged: bool  # did we converge?
     rmse: float  # last RMSE of all points
     x_hat: np.ndarray  # final point coordinates
+    theta_hat: tuple[float, np.ndarray, np.ndarray]  # final transform
     steps: int  # number of steps
     history: list[
         tuple[float, np.ndarray, np.ndarray]
@@ -91,13 +92,17 @@ class point_to_polyline(PairingFn):
 class outlier_rejection(WeightingFn):
     """Hard rejects pairs with distances greater than a IQR threshold."""
 
-    def __init__(self, y: np.ndarray, iqr_factor: float = 3.0):
+    def __init__(self, y: np.ndarray, iqr_factor: float = 3.0, mode="soft"):
         self.iqr_factor = iqr_factor
+        self.mode = mode
 
     def weight(self, x_pair, y_pair, dist2):
         th = _outlier_threshold(dist2, self.iqr_factor)
-        w = np.ones_like(dist2)
-        w[dist2 > th] = 0.1
+        if self.mode == "soft":
+            w = np.minimum(np.exp(-(dist2 - th)), 1.0)
+        else:
+            w = np.ones_like(dist2)
+            w[dist2 > th] = 0.0
         return w
 
 
@@ -115,6 +120,9 @@ class constant_weighting(WeightingFn):
 #         return y[:n]
 
 #     return compute
+
+
+# decompose
 
 
 _pair_map = {
@@ -136,8 +144,8 @@ def icp(
     pairing_fn: str | PairingFn = "point",
     weighting_fn: str | WeightingFn = "constant",
     with_scale: bool = False,
-    err_th: float = 1e-5,
-    err_diff_th: float = 1e-4,
+    err_th: float = 1e-16,
+    err_diff_th: float = 1e-12,
     use_tqdm: bool = None,
 ) -> icp_result:
     """Iteratively computes the transformation that aligns $x$ with $y$.
@@ -206,16 +214,20 @@ def icp(
             failed = True
             break
 
-        scale, R, t = motion.compute_motion(
+        incr_motion = motion.compute_motion(
             x_pair, y_pair, with_scale=with_scale, w=weights
         )
-        history.append((scale, R, t))
-        x = scale * (x @ R.T) + t.reshape(1, 3)
+
+        history.append(incr_motion)
+        scale, R, t = incr_motion
+        x = scale * (x @ R.T) + t
 
         x_pair, y_pair, xy_dist2 = pairing_fn.pair(x, y)
-        rmse = np.sqrt(xy_dist2.mean())
 
-        if use_tqdm and (step % 5 == 0):
+        # actual the weighted rmse, required for convergence properties
+        rmse = np.sqrt((xy_dist2 * weights).sum() / weights.sum())
+
+        if use_tqdm:
             gen.set_postfix({"rmse": rmse})
 
         if (rmse < err_th) or ((step > 0) and (prev_rmse - rmse < err_diff_th)):
@@ -224,10 +236,13 @@ def icp(
 
         prev_rmse = rmse
 
+    history = utils.incremental_to_cummulative_motions(history)
+
     result = icp_result(
         converged=step < max_iter and not failed,
         rmse=rmse,
         x_hat=x,
+        theta_hat=history[-1],
         steps=step + 1,
         history=history,
     )
