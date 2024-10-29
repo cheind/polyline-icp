@@ -1,3 +1,4 @@
 pytest
 matplotlib
 tqdm
+scipy # plots
