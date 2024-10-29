@@ -34,9 +34,13 @@ class polyline:
 
         # (L,N-1), len_cumsum[i] = sum of squared lengths before segment i
         self.seg_lens = np.sqrt(self.bb)
-        self.seg_lens_cumsum = np.cumulative_sum(
-            self.seg_lens, axis=1, include_initial=True
-        )[:, :-1]
+        self.seg_lens_cumsum = np.concatenate(
+            (
+                np.zeros((self.seg_lens.shape[0], 1), dtype=self.seg_lens.dtype),
+                np.cumsum(self.seg_lens, axis=1),
+            ),
+            -1,
+        )
 
     def project(self, x: np.ndarray, with_extra: bool = False):
         """Computes the closest point on each line $l_i$ for each query point $x_j$.
