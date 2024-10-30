@@ -187,6 +187,8 @@ def icp(
 
     gen = range(max_iter)
     if use_tqdm:
+        from tqdm import tqdm
+
         gen: tqdm = tqdm(gen)
 
     prev_rmse = None
