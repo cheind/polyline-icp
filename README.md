@@ -12,6 +12,13 @@ When matching line-like data (e.g. trajectories or signals), point-to-point matc
 
 ## Usage
 
+Install via
+```shell
+pip install git+https://github.com/cheind/polyline-icp.git
+```
+
+Then run a minimal example
+
 ```python
 import numpy as np
 
@@ -26,7 +33,7 @@ pidx = np.random.permutation(np.arange(10))
 r = icp(x[pidx], y, with_scale=False, pairing_fn="polyline")
 print(r.x_hat) # final points
 print(r.history) # transform history as (s,R,t) tuples
-print(r...) # more fields available
+                 # more fields available
 ```
 
 ## Polyline projections
@@ -34,6 +41,3 @@ print(r...) # more fields available
 This library comes with a polyline utility to compute the closest points on `L` polylines in `D` dimensions to a set of `M` query points in `D` dimensions. The class computes closest points and additional information that is useful in linear referencing. Due to its vectorized nature, it is actually quite performant for moderate sizes of `L` and `M`.
 
 ![](etc/closest_on_polyline.gif)
-
-
-
