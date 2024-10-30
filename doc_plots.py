@@ -30,7 +30,10 @@ class ImageIOWriter(animation.AbstractMovieWriter):
         )
 
     def finish(self):
-        iio.imwrite(self.outfile, self._frames, fps=self.fps, loop=1)
+        dur = int(1 / self.fps) * 1000
+        lag = 2000
+        duration = [dur] * (len(self._frames) - 1) + [lag]
+        iio.imwrite(self.outfile, self._frames, duration=duration, loop=4)
 
 
 def plot_closest_on_polyline():
@@ -246,7 +249,7 @@ def plot_icp():
     ani.save(
         "icp.gif",
         dpi=150,
-        writer=ImageIOWriter(fps=30),
+        writer=ImageIOWriter(fps=6),
     )
 
     plt.show()
