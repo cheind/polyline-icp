@@ -2,3 +2,4 @@ pytest
 matplotlib
 tqdm
 scipy # plots
+imageio #plots
