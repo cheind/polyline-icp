@@ -114,17 +114,6 @@ class constant_weighting(WeightingFn):
         return np.ones_like(dist2)
 
 
-# def _index_pairing(_):
-#     def compute(x, y):
-#         n = min(len(x), len(y))
-#         return y[:n]
-
-#     return compute
-
-
-# decompose
-
-
 _pair_map = {
     "point": point_to_point,
     "polyline": point_to_polyline,
@@ -168,7 +157,8 @@ def icp(
         with_scale: when true computes scale, rotation and translation
             when false, computes rotation and translation components
         err_th: Terminates when error is less than this threshold
-        err_diff_th: Terminates when the error progress falls below this threshold
+        err_diff_th: Terminates when the error progress falls below this
+            threshold
         use_tqdm: When true and tqdm is found, progress is shown
     """
 

@@ -7,8 +7,8 @@ _logger = logging.getLogger("polyicp")
 def compute_motion(
     x: np.ndarray, y: np.ndarray, with_scale: bool, w: np.ndarray = None
 ) -> tuple[float, np.ndarray, np.ndarray]:
-    """Computes the similarity/rigid transform that aligns source with reference
-    points in a least square sense.
+    """Computes the similarity/rigid transform that aligns source with
+    reference points in a least square sense.
 
     Computed components are $sRx + t$, where R is a rotation matrix, t is a
     translational shift and s is a uniform scaling constant. The transformation

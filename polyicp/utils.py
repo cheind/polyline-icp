@@ -22,7 +22,9 @@ def decompose_matrix(m):
     return s, r, t
 
 
-def incremental_to_cummulative_motions(ts: list[tuple[float, np.ndarray, np.ndarray]]):
+def incremental_to_cummulative_motions(
+    ts: list[tuple[float, np.ndarray, np.ndarray]],
+):
     assert len(ts) > 0
     d = ts[0][1].shape[0]
     t = np.eye(d + 1)
