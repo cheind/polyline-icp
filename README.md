@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/878910108.svg)](https://doi.org/10.5281/zenodo.14014753)
+
 # polyline-icp
 A vectorized n-dimensional Iterative Closest Point (ICP) for line-like data.
 
